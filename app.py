@@ -156,7 +156,7 @@ def generate_media_in_background(dream_id: int, title: str, dream_text: str):
             json={
                 "model": "grok-imagine-video",
                 "prompt": f"Create dreamlike cinematic media for a dream viewer. Title: {title}. Dream: {dream_text}",
-                "duration": 8,
+                "duration": 15,
                 "aspect_ratio": "16:9",
                 "resolution": "720p"
             },
