@@ -48,16 +48,28 @@ window.addEventListener("load", () => {
     const overlay = document.getElementById("startup-overlay");
     const content = document.getElementById("app-content");
 
-    // duration before fade
+    // already played during this session
+    if (sessionStorage.getItem("dreamshareStartupPlayed")) {
+
+        overlay.style.display = "none";
+        content.classList.add("visible");
+
+        return;
+    }
+
+    // mark startup as played
+    sessionStorage.setItem("dreamshareStartupPlayed", "true");
+
+    // play intro animation
     setTimeout(() => {
 
         overlay.classList.add("fade-out");
         content.classList.add("visible");
 
-        // remove from DOM after fade
         setTimeout(() => {
             overlay.remove();
         }, 1400);
 
-    }, 8500); // slightly shorter than 10s gif
+    }, 8500);
+
 });
