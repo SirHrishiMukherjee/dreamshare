@@ -13,7 +13,12 @@
     {% for dream in dreams %}
       <a class="dream-card" href="{{ url_for('viewer', dream_id=dream.id) }}">
         <div class="thumb">
-          {% if dream.media_url %}
+          {% if dream.media_url and dream.media_type == 'video' %}
+            <div class="video-placeholder">
+              <img src="{{ url_for('static', filename='video-placeholder.jpg') }}" alt="Video">
+              <div class="play-overlay">▶</div>
+            </div>
+          {% elif dream.media_url %}
             <img src="{{ dream.media_url }}" alt="{{ dream.title }}">
           {% else %}
             <div class="empty-thumb">No media yet</div>

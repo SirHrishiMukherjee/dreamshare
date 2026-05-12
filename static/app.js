@@ -73,3 +73,40 @@ window.addEventListener("load", () => {
     }, 8500);
 
 });
+
+// Auto-refresh pending dreams only
+function checkMediaStatus() {
+    const videoScreen = document.getElementById("dreamScreen");
+    if (!videoScreen) return;
+
+    // Only poll if we're currently showing the loading state
+    const isShowingLoader = videoScreen.querySelector(".loading-placeholder") !== null;
+    if (!isShowingLoader) {
+        return;                    // Stop polling once video is visible
+    }
+
+    const pathParts = window.location.pathname.split('/');
+    const dreamId = pathParts[pathParts.length - 1];
+    if (!dreamId || isNaN(parseInt(dreamId))) return;
+
+    fetch(`/api/dream/${dreamId}/status`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.media_status === 'done' && data.media_url) {
+                console.log("Video ready → reloading page");
+                window.location.reload();
+            }
+        })
+        .catch(err => console.error("Status check failed:", err));
+}
+
+// Start polling ONLY on viewer pages
+if (document.getElementById("dreamScreen")) {
+    // Check every 4 seconds
+    const pollInterval = setInterval(checkMediaStatus, 4000);
+    
+    // Optional: Stop polling after 5 minutes to be safe
+    setTimeout(() => {
+        clearInterval(pollInterval);
+    }, 300000); // 5 minutes
+}

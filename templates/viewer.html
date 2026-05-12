@@ -3,12 +3,18 @@
 <section class="viewer-shell">
   <div class="screen-wrap">
     <div class="video-screen" id="dreamScreen">
-      {% if dream.media_url and dream.media_type == 'video' %}
-        <video id="dreamVideo" src="{{ dream.media_url }}"></video>
+      {% if dream.media_status == 'pending' %}
+        <div class="loading-placeholder">
+          <div class="spinner"></div>
+          <p>Dream still loading...</p>
+          <small>This usually takes 30–90 seconds</small>
+        </div>
+      {% elif dream.media_url and dream.media_type == 'video' %}
+        <video id="dreamVideo" src="{{ dream.media_url }}" controls></video>
       {% elif dream.media_url %}
         <img id="dreamImage" src="{{ dream.media_url }}" alt="{{ dream.title }}">
       {% else %}
-        <div class="empty-thumb">No media generated yet</div>
+        <div class="empty-thumb">No media available</div>
       {% endif %}
       <div class="screen-glow"></div>
     </div>

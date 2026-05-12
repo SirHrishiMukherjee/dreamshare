@@ -53,6 +53,8 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, g, redirect, render_template, request, url_for
 
+import xai_sdk
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -79,19 +81,26 @@ def close_db(_: Exception | None = None) -> None:
 
 def init_db() -> None:
     db = get_db()
-    db.execute(
-        """
+    db.execute("""
         CREATE TABLE IF NOT EXISTS dreams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             dream_text TEXT NOT NULL,
             pov TEXT NOT NULL DEFAULT 'first',
             media_url TEXT,
-            media_type TEXT DEFAULT 'image',
+            media_type TEXT DEFAULT 'video',
+            media_status TEXT DEFAULT 'pending',
             created_at TEXT NOT NULL
         )
-        """
-    )
+    """)
+    
+    # Safely add media_status column if it doesn't exist (for existing databases)
+    try:
+        db.execute("ALTER TABLE dreams ADD COLUMN media_status TEXT DEFAULT 'pending'")
+        print("✅ media_status column added")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
     db.commit()
 
 
@@ -128,64 +137,84 @@ def display_text(row: sqlite3.Row) -> str:
     return text
 
 
-# ---------- Meta AI media generation hook ----------
-def generate_media_for_dream(title: str, dream_text: str) -> dict[str, Any]:
-    """
-    Replace this with your Meta AI API call.
+# ---------- X AI media generation hook ----------
+import threading
+import time
 
-    Expected return:
-      {"media_url": "...", "media_type": "image" or "video"}
+def generate_media_in_background(dream_id: int, title: str, dream_text: str):
+    """Generate video asynchronously in a background thread."""
+    try:
+        print(f"[BG] Starting video generation for dream {dream_id}")
 
-    Current fallback returns a generated SVG data URL, so the app works instantly.
-    """
-    api_key = os.environ.get("META_AI_API_KEY")
-    api_url = os.environ.get("META_AI_API_URL")
+        # === X.AI Video Generation ===
+        response = requests.post(
+            "https://api.x.ai/v1/videos/generations",
+            headers={
+                "Authorization": f"Bearer {os.environ['XAI_API_KEY']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "grok-imagine-video",
+                "prompt": f"Create dreamlike cinematic media for a dream viewer. Title: {title}. Dream: {dream_text}",
+                "duration": 8,
+                "aspect_ratio": "16:9",
+                "resolution": "720p"
+            },
+        )
+        response.raise_for_status()
+        request_id = response.json()["request_id"]
 
-    prompt = (
-        "Create dreamlike cinematic media for a music-video style dream viewer. "
-        f"Title: {title}. Dream: {dream_text}"
-    )
+        print(f"[BG] Request ID: {request_id} for dream {dream_id}")
 
-    if api_key and api_url:
-        try:
-            response = requests.post(
-                api_url,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"prompt": prompt, "type": "image"},
-                timeout=30,
+        max_attempts = 80
+        for attempt in range(max_attempts):
+            response = requests.get(
+                f"https://api.x.ai/v1/videos/{request_id}",
+                headers={"Authorization": f"Bearer {os.environ['XAI_API_KEY']}"},
             )
             response.raise_for_status()
             data = response.json()
-            return {
-                "media_url": data.get("media_url") or data.get("url"),
-                "media_type": data.get("media_type", "image"),
-            }
-        except Exception as exc:
-            print(f"[DreamShare] Meta AI media generation failed: {exc}")
+            status = data.get("status")
 
-    safe_title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    svg = f"""
-    <svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720'>
-      <defs>
-        <linearGradient id='g' x1='0' x2='1' y1='0' y2='1'>
-          <stop stop-color='#151531' offset='0'/>
-          <stop stop-color='#41246d' offset='0.45'/>
-          <stop stop-color='#111827' offset='1'/>
-        </linearGradient>
-        <filter id='glow'><feGaussianBlur stdDeviation='8' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter>
-      </defs>
-      <rect width='100%' height='100%' fill='url(#g)'/>
-      <circle cx='210' cy='160' r='72' fill='#f5d0fe' opacity='0.25' filter='url(#glow)'/>
-      <circle cx='980' cy='260' r='115' fill='#93c5fd' opacity='0.16' filter='url(#glow)'/>
-      <path d='M0 610 C 260 500, 360 700, 620 570 S 980 480, 1280 620' fill='none' stroke='#e9d5ff' stroke-width='5' opacity='0.45'/>
-      <text x='70' y='610' fill='#faf5ff' font-size='52' font-family='Georgia, serif' font-style='italic'>{safe_title}</text>
-      <text x='75' y='665' fill='#ddd6fe' font-size='24' font-family='Arial'>DreamShare generated placeholder</text>
-    </svg>
-    """.strip()
-    import base64
+            if status == "done":
+                video_url = data.get("video", {}).get("url")
+                if video_url:
+                    _save_media_success(dream_id, video_url)
+                    print(f"[BG] ✅ Video ready for dream {dream_id}")
+                    return
+            elif status in ["failed", "expired"]:
+                print(f"[BG] ❌ Generation failed for dream {dream_id}")
+                break
 
-    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
-    return {"media_url": f"data:image/svg+xml;base64,{encoded}", "media_type": "image"}
+            time.sleep(3)
+
+        # Failed or timeout
+        _save_media_failed(dream_id)
+
+    except Exception as e:
+        print(f"[BG] Error for dream {dream_id}: {e}")
+        _save_media_failed(dream_id)
+
+
+# Helper functions to avoid context issues
+def _save_media_success(dream_id: int, video_url: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE dreams SET media_url = ?, media_type = ?, media_status = ? WHERE id = ?",
+        (video_url, "video", "done", dream_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def _save_media_failed(dream_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE dreams SET media_status = 'failed' WHERE id = ?",
+        (dream_id,)
+    )
+    conn.commit()
+    conn.close()
 
 
 # ---------- Routes ----------
@@ -215,23 +244,27 @@ def compose():
         pov = request.form.get("pov", "first")
         generate = request.form.get("generate_media") == "on"
 
-        media_url = None
-        media_type = "image"
-        if generate and dream_text:
-            media = generate_media_for_dream(title, dream_text)
-            media_url = media.get("media_url")
-            media_type = media.get("media_type", "image")
-
         db = get_db()
         cursor = db.execute(
             """
-            INSERT INTO dreams (title, dream_text, pov, media_url, media_type, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO dreams (title, dream_text, pov, media_url, media_type, media_status, created_at)
+            VALUES (?, ?, ?, NULL, 'video', ?, ?)
             """,
-            (title, dream_text, pov, media_url, media_type, datetime.utcnow().isoformat()),
+            (title, dream_text, pov, 'pending' if generate else 'done', datetime.utcnow().isoformat())
         )
+        dream_id = cursor.lastrowid
         db.commit()
-        return redirect(url_for("viewer", dream_id=cursor.lastrowid))
+
+        if generate and dream_text:
+            # Start background generation
+            thread = threading.Thread(
+                target=generate_media_in_background,
+                args=(dream_id, title, dream_text),
+                daemon=True
+            )
+            thread.start()
+
+        return redirect(url_for("viewer", dream_id=dream_id))
 
     return render_template("compose.html")
 
@@ -261,16 +294,36 @@ def viewer(dream_id: int):
 
 @app.route("/regenerate/<int:dream_id>", methods=["POST"])
 def regenerate(dream_id: int):
-    db = get_db()
-    dream = db.execute("SELECT * FROM dreams WHERE id = ?", (dream_id,)).fetchone()
+    db = get_db()  # This is fine, it's in request context
+    dream = db.execute("SELECT title, dream_text FROM dreams WHERE id = ?", (dream_id,)).fetchone()
     if dream:
-        media = generate_media_for_dream(dream["title"], dream["dream_text"])
+        # Reset status
         db.execute(
-            "UPDATE dreams SET media_url = ?, media_type = ? WHERE id = ?",
-            (media.get("media_url"), media.get("media_type", "image"), dream_id),
+            "UPDATE dreams SET media_url = NULL, media_status = 'pending' WHERE id = ?",
+            (dream_id,)
         )
         db.commit()
+
+        thread = threading.Thread(
+            target=generate_media_in_background,
+            args=(dream_id, dream["title"], dream["dream_text"]),
+            daemon=True
+        )
+        thread.start()
+
     return redirect(url_for("viewer", dream_id=dream_id))
+
+
+@app.route("/api/dream/<int:dream_id>/status")
+def dream_status(dream_id: int):
+    db = get_db()
+    dream = db.execute("SELECT media_status, media_url FROM dreams WHERE id = ?", (dream_id,)).fetchone()
+    if dream:
+        return {
+            "media_status": dream["media_status"],
+            "media_url": dream["media_url"]
+        }
+    return {"media_status": "not_found"}, 404
 
 
 if __name__ == "__main__":
