@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="compose-panel">
+  <h1>Write a Dream</h1>
+  <form method="post" class="dream-form">
+    <label>Title</label>
+    <input name="title" placeholder="e.g. The Blue Staircase at Dawn" required>
+
+    <div class="switch-row">
+      <span>Point of view</span>
+      <label class="pill"><input type="radio" name="pov" value="first" checked> First person</label>
+      <label class="pill"><input type="radio" name="pov" value="third"> Third person</label>
+    </div>
+
+    <label>Dream lyrics</label>
+    <textarea id="dreamText" name="dream_text" rows="14" placeholder="I walked through a silver city where the windows sang..." required></textarea>
+
+    <div class="preview-box">
+      <div class="preview-label">Live styled preview</div>
+      <div id="dreamPreview" class="dream-script">Your dream will appear here in mild cursive italics.</div>
+    </div>
+
+    <label class="checkbox-row">
+      <input type="checkbox" name="generate_media" checked>
+      Generate AI media for this dream
+    </label>
+
+    <button class="primary" type="submit">Publish Dream</button>
+  </form>
+</section>
+{% endblock %}

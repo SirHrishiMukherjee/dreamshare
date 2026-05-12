@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DreamShare</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div id="startup-overlay">
+      <img
+          src="{{ url_for('static', filename='startup/dreamshare_startup_animation.gif') }}"
+          alt="DreamShare Startup"
+          id="startup-gif"
+      >
+  </div>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">DreamShare</a>
+    <form class="search" action="{{ url_for('index') }}" method="get">
+      <input name="q" value="{{ q or '' }}" placeholder="Search dreams, symbols, moods...">
+      <button type="submit">Search</button>
+    </form>
+    <a class="compose-link" href="{{ url_for('compose') }}">Write Dream</a>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

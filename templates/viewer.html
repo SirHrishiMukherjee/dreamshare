@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="viewer-shell">
+  <div class="screen-wrap">
+    <div class="video-screen" id="dreamScreen">
+      {% if dream.media_url and dream.media_type == 'video' %}
+        <video id="dreamVideo" src="{{ dream.media_url }}"></video>
+      {% elif dream.media_url %}
+        <img id="dreamImage" src="{{ dream.media_url }}" alt="{{ dream.title }}">
+      {% else %}
+        <div class="empty-thumb">No media generated yet</div>
+      {% endif %}
+      <div class="screen-glow"></div>
+    </div>
+
+    <div class="controls">
+      {% if prev_id %}<a class="round" href="{{ url_for('viewer', dream_id=prev_id) }}">⏮</a>{% else %}<button class="round muted">⏮</button>{% endif %}
+      <button class="round" id="playBtn">▶</button>
+      <button class="round" id="pauseBtn">⏸</button>
+      {% if next_id %}<a class="round" href="{{ url_for('viewer', dream_id=next_id) }}">⏭</a>{% else %}<button class="round muted">⏭</button>{% endif %}
+    </div>
+  </div>
+
+  <aside class="dream-copy">
+    <p class="eyebrow">Now viewing</p>
+    <h1>{{ dream.title }}</h1>
+    <p class="viewer-meta">{{ dream.pov|capitalize }} person</p>
+    <div class="dream-script large">{{ display_text }}</div>
+
+    <form method="post" action="{{ url_for('regenerate', dream_id=dream.id) }}">
+      <button class="secondary" type="submit">Regenerate Media</button>
+    </form>
+  </aside>
+</section>
+{% endblock %}

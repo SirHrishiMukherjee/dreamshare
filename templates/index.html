@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">dreams as shareable songs</p>
+    <h1>Write the dream. Generate the vision. Share the night.</h1>
+  </div>
+</section>
+
+<section class="shelf">
+  <h2>{% if q %}Search results for “{{ q }}”{% else %}Latest Dream Videos{% endif %}</h2>
+  <div class="dream-grid">
+    {% for dream in dreams %}
+      <a class="dream-card" href="{{ url_for('viewer', dream_id=dream.id) }}">
+        <div class="thumb">
+          {% if dream.media_url %}
+            <img src="{{ dream.media_url }}" alt="{{ dream.title }}">
+          {% else %}
+            <div class="empty-thumb">No media yet</div>
+          {% endif %}
+        </div>
+        <div class="card-title">{{ dream.title }}</div>
+        <div class="card-meta">{{ dream.pov|capitalize }} person · {{ dream.created_at[:10] }}</div>
+      </a>
+    {% else %}
+      <p class="empty-state">No dreams found. Write the first one.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
