@@ -166,7 +166,7 @@ def generate_media_in_background(dream_id: int, title: str, dream_text: str):
 
         print(f"[BG] Request ID: {request_id} for dream {dream_id}")
 
-        max_attempts = 80
+        max_attempts = 160
         for attempt in range(max_attempts):
             response = requests.get(
                 f"https://api.x.ai/v1/videos/{request_id}",
